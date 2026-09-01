@@ -83,7 +83,18 @@ ed25519 public key is in the manifest, so any third party can verify without
 access to your Vault, your network, or your credentials.
 
 `signatures.json` is self-describing on purpose: it carries the public key, the
-algorithm, and the canonicalisation rule. The signed message is the sha256 of
+algorithm, and the canonicalisation rule.
+
+**Self-describing is not self-authenticating.** Because the manifest carries
+the key it was signed with, it always verifies against itself — swap in a
+different key and re-sign, and verification still passes. This was observed
+directly: after the signing key was replaced, the old manifest still reported
+3183/3183 valid, because it was checked against the old key it carried. Offline
+verification proves the bytes have not changed since *some* key signed them. It
+does not prove *which* key should be trusted. That requires knowing the
+expected public key out of band — pinning it in the site build, publishing it
+separately, or cross-signing. Until then this is tamper-evidence, not
+attestation. The signed message is the sha256 of
 `json.dumps(doc, sort_keys=True, separators=(',',':'))` as a 64-char hex
 string, ASCII-encoded — confirmed empirically against Vault rather than assumed
 from the docs. **Change that canonical form and every existing signature
@@ -155,9 +166,36 @@ AWS_PROFILE=tf python vault/test-policies.py     # 9/9
 
 That test refuses to run with `VAULT_TOKEN` set, because a root token passes
 everything and would turn it into a no-op that looks like it is working. The
-assertion that matters most is the last one: the signer cannot export the
-transit private key. If that ever returns ALLOWED, every signature the project
-has produced is forgeable.
+assertion that matters most is that the signer cannot export the transit
+private key. If that ever returns ALLOWED, every signature the project has
+produced is forgeable.
+
+Eighteen assertions across four groups: direct access, escalation paths around
+it, path scoping, and self-escalation.
+
+### The escalation checks are capability queries, not attempts
+
+`transit/keys/<name>/config` is checked with `sys/capabilities-self` rather
+than by trying the write. That is not fastidiousness — it is a scar.
+
+An earlier version of this test performed the write for real. While
+demonstrating that the test could actually fail, a deliberately injected policy
+regression let the write succeed, and the test set `exportable=true` and
+`allow_plaintext_backup=true` on the live signing key. **Both flags are one-way
+in Vault: they cannot be set back to false.** The key had to be destroyed with
+`deletion_allowed=true`, recreated, and all 3183 signatures regenerated under a
+new public key.
+
+A test that permanently weakens the property it is testing — and does so
+exactly when that property is already broken — is worse than no test.
+`sys/capabilities-self` asks Vault what the token *would* be permitted to do
+and changes nothing. Same authorisation surface, no side effects. Verified:
+with the regression injected the check still reports FAIL and exits 1, and the
+key's flags are unchanged before and after.
+
+**The compromised key was** `1pD7E7+oKkHBXqEmQL+7it5O5NfgTik+FPZQJg8SQfM=`.
+Any signature bearing it should be treated as unverifiable — its private half
+was exportable by root for the few minutes before it was destroyed.
 
 ## What is still unproven
 
