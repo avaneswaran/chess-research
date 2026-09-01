@@ -11,3 +11,6 @@ infra/.terraform/
 *.tfstate.*
 terraform.tfvars
 crash.log
+
+# vault lab: unseal keys and root token, never commit
+vault/.init-keys.json

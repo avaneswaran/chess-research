@@ -4,3 +4,9 @@ requests>=2.31.0
 # submit/submit_batch.py — the AWS Batch submitter. Not needed by the ingest
 # or analysis scripts; only by the cloud tooling in CLOUD.md.
 boto3>=1.34.0
+
+# vault/ — Vault client for the ingest token and transit signing.
+hvac>=2.3.0
+
+# sign_analysis.py verify — offline ed25519 verification, no Vault needed.
+cryptography>=42.0.0

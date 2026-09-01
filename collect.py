@@ -7,7 +7,8 @@ by content-addressed UID. Safe to re-run: re-running adds source records to
 existing entries rather than duplicating games.
 
     # your OTB games, entered by hand into Lichess studies
-    export LICHESS_TOKEN=...        # needs study:read for private studies
+    # token comes from Vault (see VAULT.md); LICHESS_TOKEN still works as a
+    # fallback. Either way it needs study:read for private studies.
     python collect.py --corpus ./corpus --studies AerialAttack
 
     # the scattered stuff on disk
@@ -36,6 +37,7 @@ from pathlib import Path
 
 import requests
 
+import chessvault
 from classify import classify
 from provenance import (
     classify_tier,
@@ -62,14 +64,17 @@ OPAQUE_SUFFIXES = {".cbh", ".cbv", ".cbf", ".si4", ".sg4", ".sn4"}
 # --- sources ----------------------------------------------------------------
 
 def fetch_studies(user: str) -> str:
-    token = os.environ.get("LICHESS_TOKEN")
+    # Vault first, LICHESS_TOKEN second. Studies are the case where a missing
+    # token is quietly destructive rather than merely slow: you get the public
+    # subset and no error, so the warning below matters.
+    token = chessvault.lichess_token()
     headers = {"User-Agent": UA}
     if token:
         headers["Authorization"] = f"Bearer {token}"
     else:
-        print("  WARNING: no LICHESS_TOKEN set — you will get PUBLIC studies "
-              "only. Private OTB studies will be silently missing.",
-              file=sys.stderr)
+        print("  WARNING: no token from Vault or LICHESS_TOKEN — you will get "
+              "PUBLIC studies only. Private OTB studies will be silently "
+              "missing.", file=sys.stderr)
 
     r = requests.get(STUDY_EXPORT.format(user=user), headers=headers,
                      stream=True, timeout=300)

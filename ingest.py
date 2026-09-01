@@ -23,8 +23,9 @@ Rate limits:
     chess.com  — serial requests only; parallel calls get 429. A descriptive
                  User-Agent is effectively required or you get blocked.
     lichess    — ~20 games/sec anonymous. A personal API token roughly doubles
-                 throughput and is read from LICHESS_TOKEN (see README for the
-                 Vault wiring).
+                 throughput. It is resolved by chessvault.lichess_token():
+                 Vault KV first, then LICHESS_TOKEN, then anonymous. See
+                 VAULT.md.
 """
 
 from __future__ import annotations
@@ -41,6 +42,7 @@ from pathlib import Path
 import chess.pgn
 import requests
 
+import chessvault
 from classify import classify
 from provenance import classify_tier, compute_uids, has_annotations, identify, load_aliases, merge_source
 
@@ -104,10 +106,14 @@ def normalize_chesscom(g: dict) -> dict | None:
 def fetch_lichess(user: str, since: str | None) -> list[dict]:
     """Stream NDJSON export. Includes server-side evals where Lichess has them."""
     headers = {"Accept": "application/x-ndjson", "User-Agent": UA}
-    token = os.environ.get("LICHESS_TOKEN")
+    # Vault first, LICHESS_TOKEN second, anonymous third. chessvault logs which
+    # of the three it used, so a run's provenance is visible in its own output.
+    token = chessvault.lichess_token()
     if token:
         headers["Authorization"] = f"Bearer {token}"
-        print("  lichess: using token from LICHESS_TOKEN", file=sys.stderr)
+    else:
+        print("  lichess: no token — anonymous, roughly half throughput",
+              file=sys.stderr)
 
     params = {
         "rated": "true",
