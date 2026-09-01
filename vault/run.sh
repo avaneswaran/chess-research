@@ -55,9 +55,21 @@ case "$cmd" in
     ;;
   status)
     docker ps --filter "name=$NAME" --format '  {{.Names}}  {{.Status}}  {{.Ports}}' || true
-    curl -s http://127.0.0.1:8200/v1/sys/health 2>/dev/null \
-      | python3 -c 'import json,sys; d=json.load(sys.stdin); print(f"  initialized={d[\"initialized\"]} sealed={d[\"sealed\"]} version={d[\"version\"]}")' \
-      2>/dev/null || echo "  (API not responding — not started, or still booting)"
+    # .format(), not an f-string with escaped quotes: `\"` inside a
+    # single-quoted `python3 -c` is a shell escape Python never sees, and the
+    # resulting SyntaxError was swallowed by 2>/dev/null — so a perfectly
+    # healthy Vault reported "API not responding".
+    health=$(curl -s http://127.0.0.1:8200/v1/sys/health 2>/dev/null || true)
+    if [ -n "$health" ]; then
+      HEALTH="$health" python3 - <<'PYEOF'
+import json, os
+d = json.loads(os.environ["HEALTH"])
+print("  initialized={} sealed={} version={}".format(
+    d["initialized"], d["sealed"], d["version"]))
+PYEOF
+    else
+      echo "  (API not responding — not started, or still booting)"
+    fi
     ;;
   logs)  docker logs --tail 40 "$NAME" ;;
   shell) docker exec -it "$NAME" sh ;;
