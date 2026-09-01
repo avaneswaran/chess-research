@@ -1,0 +1,35 @@
+# Copy to terraform.tfvars and edit. terraform.tfvars is gitignored.
+
+aws_region = "us-east-1"
+
+# Optional: a named profile instead of the ambient credential chain.
+# aws_profile = "chessbook"
+
+# --- worker image -----------------------------------------------------------
+# Leave the digest null for the first apply — the ECR repository has to exist
+# before you can push to it. Then run scripts/push_image.sh, paste the digest
+# it prints here, and apply again. From that point the job definition names
+# the exact bits rather than a mutable tag.
+worker_image_tag = "sf17.1"
+# worker_image_digest = "sha256:..."
+
+# --- scale ------------------------------------------------------------------
+# 64 vCPUs at 1 vCPU per job is 64 games in flight. At roughly three minutes a
+# game that is a little over twenty games a minute, so the full 3312-game
+# backlog is a couple of hours rather than the overnight run the README
+# budgets for on one laptop.
+#
+# Check your account's "All Standard Spot Instance Requests" quota before
+# raising this; the default in a new account is often 5 vCPUs, which would
+# quietly cap you at five concurrent games.
+max_vcpus = 64
+
+# --- teardown ---------------------------------------------------------------
+# Both default to false so that `terraform destroy` refuses to take the corpus
+# and the pinned images with it. Flip them only when you mean it.
+# s3_force_destroy = true
+# ecr_force_delete = true
+
+tags = {
+  Owner = "aerialattack"
+}

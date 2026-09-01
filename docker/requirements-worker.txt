@@ -1,0 +1,13 @@
+# Exact pins, taken from the image that phase 0 verified bit-identical to the
+# laptop (docker run --entrypoint pip chessbook-worker:sf17.1 freeze).
+#
+# The previous form of this was `chess>=1.10.0` inline in the Dockerfile,
+# which meant a rebuild six months from now would silently pull a different
+# python-chess. That library generates the SAN in every analysis document and
+# drives the UCI conversation with the engine. The bench gate in the engine
+# stage catches engine drift; nothing was catching this.
+chess==1.11.2
+requests==2.34.2
+
+# Added in phase 1: the shard runner talks to S3.
+boto3==1.43.83

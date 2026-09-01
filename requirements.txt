@@ -1,2 +1,6 @@
 chess>=1.10.0
 requests>=2.31.0
+
+# submit/submit_batch.py — the AWS Batch submitter. Not needed by the ingest
+# or analysis scripts; only by the cloud tooling in CLOUD.md.
+boto3>=1.34.0

@@ -16,10 +16,13 @@
 #    comparable to analysis already in the corpus. Better to fail at build
 #    time than to discover it in a published variation.
 #
-# Build:
+# Build (from the repo root — the context must include worker/ and docker/):
 #   docker build \
 #     --build-arg SF_SHA256=<sha of the release tarball> \
 #     -t chessbook-worker:sf17.1 -f docker/Dockerfile .
+#
+# Or ./scripts/push_image.sh <ecr-repo-url> sf17.1, which builds, runs the
+# gate, pushes, and prints the digest to pin in terraform.tfvars.
 #
 # ARCHITECTURE CHOICE: bmi2, deliberately, everywhere.
 # AVX-512 is faster on Ice Lake / Sapphire Rapids spot instances, but a
@@ -81,10 +84,17 @@ FROM python:3.12-slim-bookworm
 COPY --from=engine /usr/local/bin/stockfish /usr/local/bin/stockfish
 COPY --from=engine /usr/local/share/stockfish.sha256 /usr/local/share/stockfish.sha256
 
-RUN pip install --no-cache-dir "chess>=1.10.0" "requests>=2.31.0"
+COPY docker/requirements-worker.txt /tmp/requirements-worker.txt
+RUN pip install --no-cache-dir -r /tmp/requirements-worker.txt \
+ && rm /tmp/requirements-worker.txt
 
 WORKDIR /app
 COPY classify.py provenance.py analyze.py stats.py /app/
+
+# The AWS Batch shard runner. It shells out to analyze.py rather than
+# reimplementing any of it, so this file being present changes nothing about
+# how the image behaves when you run it by hand.
+COPY worker/run_shard.py /app/
 
 # Non-root: the worker needs no privileges, and Batch job roles are the
 # identity that matters, not the uid.
@@ -93,5 +103,18 @@ USER worker
 
 ENV STOCKFISH_PATH=/usr/local/bin/stockfish
 
-ENTRYPOINT ["python", "/app/analyze.py"]
-CMD ["--help"]
+# ENTRYPOINT is the interpreter alone, not the interpreter plus a script.
+#
+# AWS Batch has no entryPoint field in containerProperties — only `command`,
+# which maps to Docker's CMD and is APPENDED to ENTRYPOINT rather than
+# replacing it. With `ENTRYPOINT ["python", "/app/analyze.py"]` a job
+# definition asking for run_shard.py actually ran
+#     python /app/analyze.py python /app/run_shard.py
+# and died on "unrecognized arguments". Keeping the script out of ENTRYPOINT
+# is what lets the job definition choose which one runs.
+#
+# By hand, the script is now explicit:
+#   docker run --rm -v $PWD/corpus:/corpus:ro -v /tmp/out:/out \
+#     chessbook-worker:<tag> /app/analyze.py --corpus /corpus --out-dir /out --game <uid>
+ENTRYPOINT ["python"]
+CMD ["/app/analyze.py", "--help"]

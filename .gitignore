@@ -2,3 +2,12 @@
 corpus/
 __pycache__/
 *.pyc
+
+# terraform
+infra/.terraform/
+# NOT .terraform.lock.hcl — that file pins provider versions and hashes,
+# and committing it is the whole point of having it.
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+crash.log

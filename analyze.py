@@ -5,11 +5,14 @@ analysis JSON.
 
 Design decisions worth knowing before you run this:
 
-1. NODE-LIMITED, SINGLE-THREADED, FIXED HASH.
+1. NODE-LIMITED, SINGLE-THREADED, FIXED HASH, EMPTY TABLE PER GAME.
    Time-limited analysis is not reproducible; node-limited analysis with
-   Threads=1 and a fixed Hash size is. That matters because a book's
-   variations must be re-verifiable a year from now against the same engine
-   build. The engine version is recorded in every output file.
+   Threads=1 and a fixed Hash size is — but only if each game also starts
+   from an empty transposition table. See `game_token` in analyze_game();
+   without it, a game's evaluations depend on which games preceded it in the
+   same process. That matters because a book's variations must be
+   re-verifiable a year from now against the same engine build. The engine
+   version is recorded in every output file.
 
 2. MULTIPV=3.
    You need the second- and third-best moves to say anything honest about
@@ -93,6 +96,15 @@ def analyze_game(game: chess.pgn.Game, engine: chess.engine.SimpleEngine,
     limit = chess.engine.Limit(nodes=nodes)
     plies = []
 
+    # A token identifying THIS game. python-chess sends `ucinewgame` — which
+    # clears Stockfish's transposition table and search heuristics — whenever
+    # this differs from the previous call's. Left at the default of None it is
+    # sent exactly once per process, so in a multi-game run every game after
+    # the first inherits a table warmed by its predecessors and its numbers
+    # depend on what ran before it. A fresh object per game restores the
+    # property this module claims.
+    game_token = object()
+
     moves = list(game.mainline_moves())
     for ply, move in enumerate(moves):
         san = board.san(move)
@@ -101,7 +113,7 @@ def analyze_game(game: chess.pgn.Game, engine: chess.engine.SimpleEngine,
             board.push(move)
             continue
 
-        info = engine.analyse(board, limit, multipv=multipv)
+        info = engine.analyse(board, limit, multipv=multipv, game=game_token)
         if isinstance(info, dict):
             info = [info]
 
@@ -125,7 +137,7 @@ def analyze_game(game: chess.pgn.Game, engine: chess.engine.SimpleEngine,
         mat_after = material_balance(board)
 
         # eval after the move actually played, from the same POV
-        after_info = engine.analyse(board, limit)
+        after_info = engine.analyse(board, limit, game=game_token)
         played_cp = cp_for_mover(score_to_dict(after_info["score"]), turn)
 
         loss = max(0, best_cp - played_cp)
