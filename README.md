@@ -61,22 +61,24 @@ published link, so treat the IDs as a contract from day one.
 keyed by `canonical_id` + ply, so the analysis can be regenerated with a newer
 Stockfish without touching a word you wrote.
 
-## Vault hook (stage 3)
+## Secrets and provenance
 
-`ingest.py` reads `LICHESS_TOKEN` from the environment. That's the seam. The
-honest version of the Vault story here is not "secrets for a static site" —
-it's the CI/ingest identity:
+`ingest.py` reads `LICHESS_TOKEN` from the environment. That's the seam, and
+it's where Vault attaches. The story here is not "secrets for a static site" —
+it's the ingest identity and the provenance of what gets published:
 
-- Lichess personal token in KV v2, injected via `vault agent` or `vault kv get`
-  into the ingest job
-- The ingest job authenticating with a workload identity rather than a static
-  token (JWT auth against your CI, or AppRole in the lab)
-- Later: dynamic credentials if the corpus moves from flat files to Postgres,
-  and transit-signed build artifacts so a published episode is provably the one
-  your pipeline produced
+- The Lichess personal token lives in KV v2 and is fetched at runtime, rather
+  than sitting in an environment variable on a laptop.
+- The ingest job authenticates with a workload identity — AWS IAM auth — so no
+  Vault-specific credential is created, delivered, stored, or rotated.
+- Published analysis is signed by a transit key whose private half cannot leave
+  Vault, so a published variation is checkable against the pipeline that
+  produced it. Verification is offline and needs no credentials.
+- Still ahead: dynamic credentials if the corpus moves from flat files to
+  Postgres.
 
-That last one is the piece worth rehearsing before the bank QBR. It's a real
-supply-chain argument, not a demo.
+See `VAULT.md` for the layout, the policy split, and the honest limits of the
+deployment.
 
 ## Open items
 
